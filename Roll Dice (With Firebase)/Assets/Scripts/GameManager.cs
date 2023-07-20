@@ -13,9 +13,16 @@ public class GameManager : MonoBehaviour
     [SerializeField] private Text _cpuDiceText;
 
     [Header("General")]
-    [SerializeField] private FirebaseManager _firebaseManager;
+    public FirebaseManager FirebaseManager;
+    public Menu Menu;
     [SerializeField] private Text _winnerText;
     [SerializeField] private Button _throwButton;
+
+    [HideInInspector] public string Username;
+    [HideInInspector] public int MatchPlayedScore;
+    [HideInInspector] public int WinScore;
+    [HideInInspector] public int TieScore;
+    [HideInInspector] public int LossScore;
 
     private void Start()
     {
@@ -46,22 +53,22 @@ public class GameManager : MonoBehaviour
 
     private void CheckResult(int player, int cpu)
     {
-        _firebaseManager.SaveMatchesPlayedScore();
+        FirebaseManager.SaveMatchPlayedScore(MatchPlayedScore += 1);
 
         if (player > cpu)
         {
-            _winnerText.text = "Player wins";
-            _firebaseManager.SaveWinScore();
+            _winnerText.text = $"{Username} wins";
+            FirebaseManager.SaveWinScore(WinScore += 1);
         }
         else if (player == cpu)
         {
-            _winnerText.text = "Draw";
-            _firebaseManager.SaveTieScore();
+            _winnerText.text = "Tie";
+            FirebaseManager.SaveTieScore(TieScore += 1);
         }
         else
         {
             _winnerText.text = "CPU wins";
-            _firebaseManager.SaveLossScore();
+            FirebaseManager.SaveLossScore(LossScore += 1);
         }
     }
 }

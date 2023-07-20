@@ -4,7 +4,8 @@ using UnityEngine;
 
 public class Menu : MonoBehaviour
 {
-    public static Menu instance;
+    [Header("General")]
+    [SerializeField] private GameManager _gameManager;
 
     [Header("Screens")]
     [SerializeField] private GameObject _loginScreen;
@@ -13,13 +14,15 @@ public class Menu : MonoBehaviour
     [SerializeField] private GameObject _profileScreen;
     [SerializeField] private GameObject _gameScreen;
 
-    private void Awake()
+    private void Start()
     {
-        if (instance == null) instance = this;
-        else Destroy(this);
+        if (!_loginScreen.activeInHierarchy)
+        {
+            OpenLogin();
+        }
     }
 
-    private void TurnPanelsOff()
+    private void SetInactiveScreens()
     {
         _loginScreen.SetActive(false);
         _registerScreen.SetActive(false);
@@ -28,39 +31,39 @@ public class Menu : MonoBehaviour
         _gameScreen.SetActive(false);
     }
 
-    public void OpenRegisterPanel()
+    public void OpenRegister()
     {
-        TurnPanelsOff();
+        SetInactiveScreens();
         _registerScreen.SetActive(true);
     }
 
-    public void OpenLoginPanelAfterRegister()
+    public void OpenLogin()
     {
-        TurnPanelsOff();
+        SetInactiveScreens();
         _loginScreen.SetActive(true);
+        _gameManager.FirebaseManager.CleanInputFields();
     }
 
-    public void OpenMenuPanel()
+    public void OpenMenu(bool backFromGame)
     {
-        TurnPanelsOff();
+        SetInactiveScreens();
         _menuScreen.SetActive(true);
+
+        if (backFromGame)
+        {
+            _gameManager.FirebaseManager.SetPlayerScoreOnUI();
+        }
     }
 
-    public void OpenLoginPanelAfterSignOut()
+    public void OpenOptions()
     {
-        TurnPanelsOff();
-        _loginScreen.SetActive(true);
-    }
-
-    public void OpenPlayerProfilePanel()
-    {
-        TurnPanelsOff();
+        SetInactiveScreens();
         _profileScreen.SetActive(true);
     }
 
-    public void OpenGamePanel()
+    public void OpenGame()
     {
-        TurnPanelsOff();
+        SetInactiveScreens();
         _gameScreen.SetActive(true);
     }
 }
