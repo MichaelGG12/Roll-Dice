@@ -6,6 +6,7 @@ using Firebase.Database;
 using UnityEngine.UI;
 using System;
 using System.Threading.Tasks;
+using System.Linq;
 
 public interface IFirebaseManager
 {
@@ -18,7 +19,6 @@ public interface IFirebaseManager
 public class FirebaseManager : MonoBehaviour, IFirebaseManager
 {
     [Header("General")]
-    [SerializeField] private bool _checkFirebaseStatus;
     [SerializeField] private GameManager _gameManager;
 
     [SerializeField] private DependencyStatus _dependecyStatus;
@@ -50,50 +50,43 @@ public class FirebaseManager : MonoBehaviour, IFirebaseManager
     [SerializeField] private InputField _updateUsernameField;
     private bool _firstTimePlaying;
 
+    [Header("Scoreboard")]
+    [SerializeField] private Transform _scoreboardContent;
+    [SerializeField] private GameObject _scoreElement;
+
     private void Awake()
     {
-        if (_dependecyStatus == DependencyStatus.Available) InitializaFirebase();
-        else Debug.LogError(_dependecyStatus);
-
-        if (_checkFirebaseStatus) StartCoroutine(CheckAndFixDependenciesCoroutine());
-        FirebaseApp.CheckAndFixDependenciesAsync().ContinueWith(task => _dependecyStatus = task.Result);
+        FirebaseApp.CheckAndFixDependenciesAsync().ContinueWith(task =>
+        {
+            _dependecyStatus = task.Result;
+            if (_dependecyStatus == DependencyStatus.Available)
+            {
+                //If they are avalible Initialize Firebase
+                InitializeFirebase();
+            }
+            else
+            {
+                Debug.LogError("Could not resolve all Firebase dependencies: " + _dependecyStatus);
+            }
+        });
     }
 
-    #region Firebase initialization 
-
-    private IEnumerator CheckAndFixDependenciesCoroutine()
-    {
-        Task<DependencyStatus> checkDependenciesTask = FirebaseApp.CheckAndFixDependenciesAsync();
-        yield return new WaitUntil(() => checkDependenciesTask.IsCompleted);
-        DependencyStatus dependencyStatus = checkDependenciesTask.Result;
-
-        if (dependencyStatus == DependencyStatus.Available)
-        {
-            Debug.Log($"Firebase status: {dependencyStatus}");
-        }
-        else
-        {
-            Debug.LogError(String.Format("Could not resolve Firebase dependencies: {0}", dependencyStatus));
-        }
-    }
-
-    private void InitializaFirebase()
+    private void InitializeFirebase()
     {
         _firebaseAuth = FirebaseAuth.DefaultInstance;
+        _dbReference = FirebaseDatabase.DefaultInstance.RootReference;
     }
-
-    #endregion
 
     #region Login and register
 
     private IEnumerator Login(string email, string password)
     {
-        Task<AuthResult> LoginTask = _firebaseAuth.SignInWithEmailAndPasswordAsync(email, password);
-        yield return new WaitUntil(predicate: () => LoginTask.IsCompleted);
+        Task<AuthResult> loginTask = _firebaseAuth.SignInWithEmailAndPasswordAsync(email, password);
+        yield return new WaitUntil(predicate: () => loginTask.IsCompleted);
 
-        if (LoginTask.Exception != null)
+        if (loginTask.Exception != null)
         {
-            FirebaseException exception = LoginTask.Exception.GetBaseException() as FirebaseException;
+            FirebaseException exception = loginTask.Exception.GetBaseException() as FirebaseException;
             AuthError error = (AuthError)exception.ErrorCode;
             string message = "Login Failed!";
 
@@ -106,10 +99,10 @@ public class FirebaseManager : MonoBehaviour, IFirebaseManager
                     message = "Missing Password";
                     break;
                 case AuthError.WrongPassword:
-                    message = "Wrong Password";
+                    message = "Wrong credentials";
                     break;
                 case AuthError.InvalidEmail:
-                    message = "Invalid Email";
+                    message = "Wrong credentials";
                     break;
                 case AuthError.UserNotFound:
                     message = "Account does not exist";
@@ -119,8 +112,8 @@ public class FirebaseManager : MonoBehaviour, IFirebaseManager
         }
         else
         {
-            _firebaseUser = LoginTask.Result.User;
-            _dbReference = FirebaseDatabase.DefaultInstance.RootReference;
+            _firebaseUser = new FirebaseUser(loginTask.Result.User);
+            _loginWarningText.text = "Logged in...";
 
             StartCoroutine(LoadPlayerData());
             yield return new WaitForSeconds(1);
@@ -175,11 +168,12 @@ public class FirebaseManager : MonoBehaviour, IFirebaseManager
             }
             else
             {
-                _firebaseUser = RegisterTask.Result.User;
+                _firebaseUser = new FirebaseUser(RegisterTask.Result.User);
 
                 if (_firebaseUser != null)
                 {
                     UserProfile profile = new UserProfile { DisplayName = username };
+
                     Task ProfileTask = _firebaseUser.UpdateUserProfileAsync(profile);
                     yield return new WaitUntil(predicate: () => ProfileTask.IsCompleted);
 
@@ -259,7 +253,7 @@ public class FirebaseManager : MonoBehaviour, IFirebaseManager
 
     private IEnumerator LoadPlayerData()
     {
-        var dbTask = _dbReference.Child("Users").Child(_firebaseUser.UserId).GetValueAsync();
+        Task<DataSnapshot> dbTask = _dbReference.Child("Users").Child(_firebaseUser.UserId).GetValueAsync();
 
         yield return new WaitUntil(predicate: () => dbTask.IsCompleted);
 
@@ -269,10 +263,7 @@ public class FirebaseManager : MonoBehaviour, IFirebaseManager
         }
         else if (dbTask.Result.Value == null)
         {
-            _matchesPlayedText.text = "MP 0";
-            _winScoreText.text = "MW 0";
-            _TieScoreText.text = "MT 0";
-            _lossScoreText.text = "ML 0";
+            SetPlayerScoreOnUI();
             _xpLevelText.text = "1";
             _firstTimePlaying = false;
         }
@@ -300,12 +291,54 @@ public class FirebaseManager : MonoBehaviour, IFirebaseManager
         }
     }
 
+    private IEnumerator LoadScoreboardData()
+    {
+        //Get all the users data ordered by kills amount
+        Task<DataSnapshot> dBTask = _dbReference.Child("Users").OrderByChild("MatchWinScore").GetValueAsync();
+
+        yield return new WaitUntil(predicate: () => dBTask.IsCompleted);
+
+        if (dBTask.Exception != null)
+        {
+            Debug.LogWarning(message: $"Failed to register task with {dBTask.Exception}");
+        }
+        else
+        {
+            DataSnapshot snapshot = dBTask.Result;
+
+            for (int i = 0; i < _scoreboardContent.transform.childCount; i++)
+            {
+                if (i > 1)
+                {
+                    Destroy(_scoreboardContent.transform.GetChild(i).gameObject);
+                }
+            }
+            int playersCount = 0;
+
+            foreach (DataSnapshot childSnapshot in snapshot.Children.Reverse())
+            {
+                string username = childSnapshot.Child("Username").Value.ToString();
+                int matchPlayed = int.Parse(childSnapshot.Child("MatchPlayed").Value.ToString());
+                int matchWin = int.Parse(childSnapshot.Child("MatchWinScore").Value.ToString());
+                int matchTie = int.Parse(childSnapshot.Child("MatchTieScore").Value.ToString());
+                int matchLoss = int.Parse(childSnapshot.Child("MatchLossScore").Value.ToString());
+
+                GameObject scoreboardElement = Instantiate(_scoreElement, _scoreboardContent);
+                scoreboardElement.GetComponent<PlayerScore>().NewScoreElement(username, matchPlayed, matchWin, matchTie, matchLoss);
+
+                playersCount++;
+                if (playersCount >= 5) break;
+            }
+            _gameManager.Menu.OpenScoreboard();
+        }
+    }
+
     public void SetPlayerScoreOnUI()
     {
         _matchesPlayedText.text = $"MP {_gameManager.MatchPlayedScore}";
-        _winScoreText.text = $"MW {_gameManager.WinScore}";
-        _TieScoreText.text = $"MT {_gameManager.TieScore}";
-        _lossScoreText.text = $"ML {_gameManager.LossScore}";
+        _winScoreText.text = $"W {_gameManager.WinScore}";
+        _TieScoreText.text = $"D {_gameManager.TieScore}";
+        _lossScoreText.text = $"L {_gameManager.LossScore}";
     }
 
     public void SaveUsername(string username)
@@ -371,6 +404,12 @@ public class FirebaseManager : MonoBehaviour, IFirebaseManager
     public void SaveProfileInfo()
     {
         StartCoroutine(UpdateUsernameAuth(_updateUsernameField.text));
+    }
+
+    public void Scoreboard()
+    {
+        Debug.Log("started");
+        StartCoroutine(LoadScoreboardData());
     }
 
     #endregion

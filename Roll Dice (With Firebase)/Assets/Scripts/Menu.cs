@@ -13,6 +13,7 @@ public class Menu : MonoBehaviour
     [SerializeField] private GameObject _menuScreen;
     [SerializeField] private GameObject _profileScreen;
     [SerializeField] private GameObject _gameScreen;
+    [SerializeField] private GameObject _scoreboardScreen;
 
     private void Start()
     {
@@ -29,6 +30,7 @@ public class Menu : MonoBehaviour
         _menuScreen.SetActive(false);
         _profileScreen.SetActive(false);
         _gameScreen.SetActive(false);
+        _scoreboardScreen.SetActive(false);
     }
 
     public void OpenRegister()
@@ -65,5 +67,11 @@ public class Menu : MonoBehaviour
     {
         SetInactiveScreens();
         _gameScreen.SetActive(true);
+    }
+
+    public void OpenScoreboard()
+    {
+        SetInactiveScreens();
+        _scoreboardScreen.SetActive(true);
     }
 }
