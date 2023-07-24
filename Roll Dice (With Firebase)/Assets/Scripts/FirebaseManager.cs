@@ -7,6 +7,7 @@ using UnityEngine.UI;
 using System;
 using System.Threading.Tasks;
 using System.Linq;
+using Firebase.Extensions;
 
 public interface IFirebaseManager
 {
@@ -21,9 +22,9 @@ public class FirebaseManager : MonoBehaviour, IFirebaseManager
     [Header("General")]
     [SerializeField] private GameManager _gameManager;
 
-    [SerializeField] private DependencyStatus _dependecyStatus;
-    [SerializeField] private FirebaseAuth _firebaseAuth;
-    [SerializeField] private FirebaseUser _firebaseUser;
+    private DependencyStatus _dependecyStatus;
+    private FirebaseAuth _firebaseAuth;
+    private FirebaseUser _firebaseUser;
     private DatabaseReference _dbReference;
 
     [Header("Login")]
@@ -56,12 +57,16 @@ public class FirebaseManager : MonoBehaviour, IFirebaseManager
 
     private void Awake()
     {
-        FirebaseApp.CheckAndFixDependenciesAsync().ContinueWith(task =>
+        _dependecyStatus = DependencyStatus.Available;
+    }
+
+    private void Start()
+    {
+        FirebaseApp.CheckAndFixDependenciesAsync().ContinueWithOnMainThread(task =>
         {
             _dependecyStatus = task.Result;
             if (_dependecyStatus == DependencyStatus.Available)
             {
-                //If they are avalible Initialize Firebase
                 InitializeFirebase();
             }
             else
@@ -75,6 +80,18 @@ public class FirebaseManager : MonoBehaviour, IFirebaseManager
     {
         _firebaseAuth = FirebaseAuth.DefaultInstance;
         _dbReference = FirebaseDatabase.DefaultInstance.RootReference;
+    }
+
+    public void CleanInputFields()
+    {
+        _loginEmailField.text = string.Empty;
+        _loginPasswordField.text = string.Empty;
+        _loginWarningText.text = string.Empty;
+
+        _registerEmailField.text = string.Empty;
+        _registerUsernameField.text = string.Empty;
+        _registerPasswordField.text = string.Empty;
+        _registerVerifyPasswordField.text = string.Empty;
     }
 
     #region Login and register
@@ -195,7 +212,7 @@ public class FirebaseManager : MonoBehaviour, IFirebaseManager
 
     #endregion
 
-    #region Database - Player profile
+    #region Set DB values
 
     private IEnumerator UpdateUsernameAuth(string username)
     {
@@ -293,7 +310,6 @@ public class FirebaseManager : MonoBehaviour, IFirebaseManager
 
     private IEnumerator LoadScoreboardData()
     {
-        //Get all the users data ordered by kills amount
         Task<DataSnapshot> dBTask = _dbReference.Child("Users").OrderByChild("MatchWinScore").GetValueAsync();
 
         yield return new WaitUntil(predicate: () => dBTask.IsCompleted);
@@ -308,7 +324,7 @@ public class FirebaseManager : MonoBehaviour, IFirebaseManager
 
             for (int i = 0; i < _scoreboardContent.transform.childCount; i++)
             {
-                if (i > 1)
+                if (i > 0)
                 {
                     Destroy(_scoreboardContent.transform.GetChild(i).gameObject);
                 }
@@ -335,10 +351,10 @@ public class FirebaseManager : MonoBehaviour, IFirebaseManager
 
     public void SetPlayerScoreOnUI()
     {
-        _matchesPlayedText.text = $"MP {_gameManager.MatchPlayedScore}";
-        _winScoreText.text = $"W {_gameManager.WinScore}";
-        _TieScoreText.text = $"D {_gameManager.TieScore}";
-        _lossScoreText.text = $"L {_gameManager.LossScore}";
+        _matchesPlayedText.text = $"MP-{_gameManager.MatchPlayedScore}";
+        _winScoreText.text = $"W-{_gameManager.WinScore}";
+        _TieScoreText.text = $"D-{_gameManager.TieScore}";
+        _lossScoreText.text = $"L-{_gameManager.LossScore}";
     }
 
     public void SaveUsername(string username)
@@ -368,21 +384,7 @@ public class FirebaseManager : MonoBehaviour, IFirebaseManager
 
     #endregion
 
-    #region Clear all input fields
-
-    public void CleanInputFields()
-    {
-        _loginEmailField.text = string.Empty;
-        _loginPasswordField.text = string.Empty;
-        _registerEmailField.text = string.Empty;
-        _registerUsernameField.text = string.Empty;
-        _registerPasswordField.text = string.Empty;
-        _registerVerifyPasswordField.text = string.Empty;
-    }
-
-    #endregion
-
-    #region Buttons
+    #region UI Buttons
 
     public void Login()
     {
@@ -408,7 +410,6 @@ public class FirebaseManager : MonoBehaviour, IFirebaseManager
 
     public void Scoreboard()
     {
-        Debug.Log("started");
         StartCoroutine(LoadScoreboardData());
     }
 
